@@ -19,15 +19,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Получаем конфиги
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-ADMIN_IDS = list(map(int, os.getenv('ADMIN_IDS', '').split(','))) if os.getenv('ADMIN_IDS') else []
+# Получаем конфиги из секретов или окружения
+def get_bot_token():
+    """Получает BOT_TOKEN из переменных окружения"""
+    token = os.getenv('BOT_TOKEN')
+    if not token:
+        logger.error("❌ BOT_TOKEN не найден в переменных окружения или секретах!")
+        raise ValueError("BOT_TOKEN не найден")
+    return token
 
-# Проверка токена только при запуске, а не при импорте
-def check_bot_token():
-    """Проверяет наличие BOT_TOKEN при запуске"""
-    if not BOT_TOKEN:
-        raise ValueError("BOT_TOKEN не найден в переменных окружения")
+def get_admin_ids():
+    """Получает ADMIN_IDS из переменных окружения"""
+    admin_ids_str = os.getenv('ADMIN_IDS', '')
+    if not admin_ids_str:
+        logger.warning("⚠️  ADMIN_IDS не установлены, доступ всем")
+        return []
+    try:
+        return list(map(int, admin_ids_str.split(',')))
+    except ValueError:
+        logger.error("❌ ADMIN_IDS некорректного формата. Используйте: 123456789 или 123456789,987654321")
+        return []
+
+# Получаем значения
+BOT_TOKEN = None
+ADMIN_IDS = []
+
+try:
+    BOT_TOKEN = get_bot_token()
+    ADMIN_IDS = get_admin_ids()
+except ValueError as e:
+    logger.error(f"Ошибка конфигурации: {e}")
 
 
 class ProxyBot:
@@ -239,7 +260,12 @@ class ProxyBot:
     
     async def run(self) -> None:
         """Запускает бота"""
-        check_bot_token()  # Проверяем токен перед запуском
+        if not BOT_TOKEN:
+            logger.error("❌ BOT_TOKEN не установлен! Проверьте переменные окружения и секреты.")
+            raise ValueError("BOT_TOKEN не найден в переменных окружения")
+        
+        logger.info(f"✅ BOT_TOKEN загружен")
+        logger.info(f"✅ ADMIN_IDS: {ADMIN_IDS if ADMIN_IDS else 'Не установлены (доступ всем)'}")
         
         self.application = Application.builder().token(BOT_TOKEN).build()
         

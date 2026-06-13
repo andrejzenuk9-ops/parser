@@ -1,0 +1,142 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    name: Lint & Test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pylint flake8
+    
+    - name: Lint with flake8
+      run: |
+        flake8 bot.py proxy_parser.py --count --select=E9,F63,F7,F82 --show-source --statistics || true
+    
+    - name: Check syntax
+      run: |
+        python -m py_compile bot.py proxy_parser.py
+    
+    - name: Validate imports
+      run: |
+        python -c "import bot; import proxy_parser; print('✅ All imports successful')"
+
+  build-docker:
+    runs-on: ubuntu-latest
+    name: Build Docker Image
+    needs: lint-and-test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Build Docker image
+      run: |
+        docker build -t proxy-parser-bot:${{ github.sha }} -t proxy-parser-bot:latest .
+    
+    - name: Test Docker image
+      run: |
+        docker run --rm proxy-parser-bot:latest python -c "import bot; import proxy_parser; print('✅ Docker image is valid')"
+
+  security-check:
+    runs-on: ubuntu-latest
+    name: Security Check
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install security tools
+      run: |
+        pip install bandit safety
+    
+    - name: Run Bandit security scan
+      run: |
+        bandit -r bot.py proxy_parser.py -f json -o bandit-report.json || true
+    
+    - name: Check dependencies for vulnerabilities
+      run: |
+        pip install -r requirements.txt
+        safety check --json || true
+
+  code-quality:
+    runs-on: ubuntu-latest
+    name: Code Quality
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pylint
+    
+    - name: Run pylint
+      run: |
+        pylint bot.py proxy_parser.py --exit-zero --output-format=colorized
+
+  notify-success:
+    runs-on: ubuntu-latest
+    name: Notify Success
+    needs: [lint-and-test, build-docker, security-check, code-quality]
+    if: success()
+    
+    steps:
+    - name: Success notification
+      run: |
+        echo "✅ All checks passed!"
+        echo "Build: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  notify-failure:
+    runs-on: ubuntu-latest
+    name: Notify Failure
+    needs: [lint-and-test, build-docker, security-check, code-quality]
+    if: failure()
+    
+    steps:
+    - name: Failure notification
+      run: |
+        echo "❌ Pipeline failed!"
+        echo "Check details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        exit 1

@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  proxy-parser-bot:
+    build: .
+    container_name: proxy-parser-bot
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - ADMIN_IDS=${ADMIN_IDS}
+    restart: always
+    networks:
+      - bot-network
+    volumes:
+      - ./logs:/app/logs
+
+networks:
+  bot-network:
+    driver: bridge

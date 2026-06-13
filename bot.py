@@ -23,8 +23,11 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_IDS = list(map(int, os.getenv('ADMIN_IDS', '').split(','))) if os.getenv('ADMIN_IDS') else []
 
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN не найден в переменных окружения")
+# Проверка токена только при запуске, а не при импорте
+def check_bot_token():
+    """Проверяет наличие BOT_TOKEN при запуске"""
+    if not BOT_TOKEN:
+        raise ValueError("BOT_TOKEN не найден в переменных окружения")
 
 
 class ProxyBot:
@@ -236,6 +239,8 @@ class ProxyBot:
     
     async def run(self) -> None:
         """Запускает бота"""
+        check_bot_token()  # Проверяем токен перед запуском
+        
         self.application = Application.builder().token(BOT_TOKEN).build()
         
         self.setup_handlers()
